@@ -1,0 +1,22 @@
+{
+  "name": "autoapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Apollo CSV -> personalized Gmail drafts for recruiter outreach, with follow-up tracking",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "autoapp": "node --disable-warning=ExperimentalWarning --experimental-strip-types src/cli.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "csv-parse": "^5.6.0",
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

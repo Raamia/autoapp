@@ -1,0 +1,13 @@
+{
+  "me": {
+    "name": "Your Name",
+    "email": "you@gmail.com"
+  },
+  "signature": "Your Name\nyoursite.com | linkedin.com/in/you",
+  "dailyCap": 25,
+  "initialTemplate": "initial.txt",
+  "followUps": [
+    { "step": 1, "afterDays": 3, "template": "followup-1.txt" },
+    { "step": 2, "afterDays": 8, "template": "followup-2.txt" }
+  ]
+}

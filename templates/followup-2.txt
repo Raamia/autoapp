@@ -1,0 +1,10 @@
+Subject: Re: Quick intro
+
+Hi {{first_name}},
+
+Last note from me — I don't want to clutter your inbox.
+
+If {{company}} opens something up down the line, I'd welcome the conversation.
+Either way, thanks for your time.
+
+{{signature}}

@@ -1,0 +1,20 @@
+node_modules/
+
+# Google OAuth client secret + the token it mints. Never commit these.
+credentials.json
+token.json
+
+# Local state: contacts, message bodies, send history.
+*.db
+*.db-journal
+*.db-wal
+data/
+
+# Your real config (has your name/email/signature). config.example.json is tracked.
+config.json
+
+# Apollo exports
+*.csv
+!templates/*.csv
+
+.DS_Store

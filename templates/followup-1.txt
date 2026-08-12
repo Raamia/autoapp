@@ -1,0 +1,10 @@
+Subject: Re: Quick intro
+
+Hi {{first_name}},
+
+Floating this back to the top of your inbox in case it got buried.
+
+Still very interested in {{company}} — happy to send over my resume or a few
+links if that's useful.
+
+{{signature}}

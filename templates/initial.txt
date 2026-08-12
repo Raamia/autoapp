@@ -1,0 +1,14 @@
+Subject: Quick intro — [YOUR ROLE] interested in {{company}}
+
+Hi {{first_name}},
+
+I came across your profile while looking at {{company}} and wanted to reach out
+directly rather than disappear into an application portal.
+
+I'm a [YOUR ROLE] with [N] years in [DOMAIN]. Most recently I [ONE CONCRETE
+THING YOU SHIPPED OR MOVED — a number is better than an adjective].
+
+If you're hiring for anything in that shape, I'd love to talk. If not, no
+worries at all — I'll stay out of your inbox.
+
+{{signature}}
