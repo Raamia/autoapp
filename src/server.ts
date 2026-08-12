@@ -7,6 +7,7 @@ import { importCsvContent } from './csv-import.ts';
 import { authStatus, authorize } from './gmail.ts';
 import { queueInitial, queueFollowUps, sync } from './sequence.ts';
 import { listTemplates, readTemplate, writeTemplate, render } from './templates.ts';
+import { saveResume, resumeInfo, clearAll } from './attachments.ts';
 import { eligibleForInitial, getDb, suppress } from './db.ts';
 
 const PAGE = resolve(import.meta.dirname, '../public/index.html');
@@ -39,11 +40,30 @@ const routes: Record<string, (body: any) => unknown | Promise<unknown>> = {
       authError: authRun.error,
       // Initial template first — it's the one that actually gets edited.
       templates: orderedTemplates(),
+      resume: configExists() ? resumeInfo(loadConfig().resume?.file ?? null) : null,
       ...pipelineCounts(),
     };
   },
 
   'POST /api/config': (body) => ({ config: saveConfig(body) }),
+
+  'POST /api/resume': (body) => {
+    if (typeof body.content !== 'string') throw new Error('No file content received.');
+    const info = saveResume(String(body.filename ?? 'resume.pdf'), body.content);
+    const cfg = loadConfig();
+    // Replacing a resume keeps whatever you already chose; the first upload has
+    // to turn attaching on, or the file would sit there doing nothing.
+    const attachTo = cfg.resume?.file ? cfg.resume.attachTo : 'initial';
+    saveConfig({ ...cfg, resume: { file: info.filename, attachTo } });
+    return { ...info, attachTo };
+  },
+
+  'POST /api/resume/remove': () => {
+    clearAll();
+    const cfg = loadConfig();
+    saveConfig({ ...cfg, resume: { file: null, attachTo: 'none' } });
+    return { removed: true };
+  },
 
   'GET /api/template': (body) => ({ content: readTemplate(body.name) }),
 
@@ -118,6 +138,7 @@ function safeConfig() {
     dailyCap: c.dailyCap,
     initialTemplate: c.initialTemplate,
     followUps: c.followUps,
+    resume: c.resume,
   };
 }
 

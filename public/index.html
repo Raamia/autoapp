@@ -80,6 +80,11 @@
   .msg pre { margin: 0; white-space: pre-wrap; font: inherit; font-size: 13px; }
   .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
   .tabs button.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .filerow {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--code); border-radius: 8px; padding: 12px 14px;
+  }
+  .filerow strong { display: block; font-size: 14px; }
   code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
 </style>
 </head>
@@ -134,9 +139,45 @@
     </p>
   </div>
 
+  <!-- ── Resume ────────────────────────────────────────── -->
+  <div class="card">
+    <h2>3 · Resume</h2>
+    <div id="resumeNone">
+      <div class="drop" id="resumeDrop">
+        <strong>Drop your resume here</strong><br>
+        <span style="font-size:13px">PDF, DOC, DOCX or TXT — 10 MB max</span>
+      </div>
+    </div>
+    <div id="resumeHave" hidden>
+      <div class="filerow">
+        <div>
+          <strong id="resumeName"></strong>
+          <span class="note" style="margin:0" id="resumeSize"></span>
+        </div>
+        <button id="resumeRemove">Remove</button>
+      </div>
+      <div style="margin-top:14px">
+        <label for="attachTo">Attach it to</label>
+        <select id="attachTo">
+          <option value="initial">The first email only</option>
+          <option value="followups">Follow-ups only</option>
+          <option value="all">Every email</option>
+          <option value="none">Don't attach (keep the file)</option>
+        </select>
+      </div>
+    </div>
+    <input type="file" id="resumeFile" accept=".pdf,.doc,.docx,.txt" hidden>
+    <pre class="out" id="resumeOut"></pre>
+    <p class="note">
+      Worth knowing: an attachment on a cold first email is a real spam signal, and some
+      corporate filters quarantine mail with attachments from unknown senders. <strong>Follow-ups
+      only</strong> is the safer pattern — the first email asks, the follow-up delivers.
+    </p>
+  </div>
+
   <!-- ── Contacts ──────────────────────────────────────── -->
   <div class="card">
-    <h2>3 · Contacts</h2>
+    <h2>4 · Contacts</h2>
     <div class="drop" id="drop">
       <strong>Drop an Apollo CSV here</strong><br>
       <span style="font-size:13px">or click to choose a file</span>
@@ -148,7 +189,7 @@
 
   <!-- ── Run ───────────────────────────────────────────── -->
   <div class="card">
-    <h2>4 · Run</h2>
+    <h2>5 · Run</h2>
     <div class="actions">
       <label for="limit" style="margin:0">How many</label>
       <input id="limit" type="number" min="1" value="10" style="width:74px">
@@ -227,6 +268,8 @@ async function refresh() {
     if (state.templates.length) loadTemplate(currentTpl || state.templates[0]);
   }
 
+  renderResume();
+
   // Pipeline stats
   const order = ['new', 'active', 'replied', 'bounced', 'skipped', 'closed'];
   const stats = $('stats');
@@ -277,6 +320,8 @@ $('saveConfig').onclick = (e) => withBusy(e.target, async () => {
       { step: 1, afterDays: 3, template: 'followup-1.txt' },
       { step: 2, afterDays: 8, template: 'followup-2.txt' },
     ],
+    // Carry this through — omitting it would clear the uploaded resume.
+    resume: state.config?.resume || { file: null, attachTo: 'none' },
   });
   await refresh();
   $('runOut').textContent = 'Details saved.';
@@ -301,6 +346,73 @@ $('saveTpl').onclick = (e) => withBusy(e.target, async () => {
     throw err;
   }
 });
+
+// ── Resume ──
+function renderResume() {
+  const r = state.resume;
+  $('resumeNone').hidden = !!r;
+  $('resumeHave').hidden = !r;
+  if (r) {
+    $('resumeName').textContent = r.filename;
+    $('resumeSize').textContent = (r.size / 1024).toFixed(0) + ' KB';
+    $('attachTo').value = state.config?.resume?.attachTo || 'initial';
+  }
+}
+
+const rDrop = $('resumeDrop');
+rDrop.onclick = () => $('resumeFile').click();
+rDrop.ondragover = (e) => { e.preventDefault(); rDrop.classList.add('over'); };
+rDrop.ondragleave = () => rDrop.classList.remove('over');
+rDrop.ondrop = (e) => {
+  e.preventDefault();
+  rDrop.classList.remove('over');
+  if (e.dataTransfer.files[0]) uploadResume(e.dataTransfer.files[0]);
+};
+$('resumeFile').onchange = (e) => e.target.files[0] && uploadResume(e.target.files[0]);
+
+/** Read as a data URL, then keep only the base64 payload after the comma. */
+function toBase64(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result).split(',')[1] || '');
+    fr.onerror = () => rej(new Error('Could not read that file.'));
+    fr.readAsDataURL(file);
+  });
+}
+
+async function uploadResume(file) {
+  const out = $('resumeOut');
+  out.textContent = `Uploading ${file.name}…`;
+  try {
+    const info = await api('/api/resume', 'POST', {
+      filename: file.name,
+      content: await toBase64(file),
+    });
+    out.textContent = `${info.filename} attached — ${(info.size / 1024).toFixed(0)} KB.`;
+    await refresh();
+  } catch (e) {
+    out.textContent = 'Error: ' + e.message;
+  }
+}
+
+$('resumeRemove').onclick = (e) => withBusy(e.target, async () => {
+  await api('/api/resume/remove', 'POST', {});
+  $('resumeOut').textContent = 'Resume removed. Emails will go out without an attachment.';
+  await refresh();
+});
+
+$('attachTo').onchange = async (e) => {
+  try {
+    await api('/api/config', 'POST', {
+      ...state.config,
+      resume: { ...state.config.resume, attachTo: e.target.value },
+    });
+    $('resumeOut').textContent = 'Saved.';
+    await refresh();
+  } catch (err) {
+    $('resumeOut').textContent = 'Error: ' + err.message;
+  }
+};
 
 // ── CSV drop ──
 const drop = $('drop');

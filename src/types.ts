@@ -47,6 +47,15 @@ export interface FollowUpConfig {
   template: string;
 }
 
+/** Which steps carry the resume attachment. */
+export type AttachTo = 'none' | 'initial' | 'followups' | 'all';
+
+export interface ResumeConfig {
+  /** Basename of the file in attachments/, or null when none is uploaded. */
+  file: string | null;
+  attachTo: AttachTo;
+}
+
 export interface Config {
   me: { name: string; email: string };
   signature: string;
@@ -54,4 +63,5 @@ export interface Config {
   dailyCap: number;
   initialTemplate: string;
   followUps: FollowUpConfig[];
+  resume: ResumeConfig;
 }

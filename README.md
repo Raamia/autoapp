@@ -51,8 +51,8 @@ npm run web
 ```
 
 Opens <http://localhost:4173>. Everything is on one page: your details and the
-Gmail connect button, the template editor, a drag-and-drop zone for Apollo CSVs,
-and buttons for Preview / Create drafts / Sync / Follow-ups.
+Gmail connect button, the template editor, your resume, a drag-and-drop zone for
+Apollo CSVs, and buttons for Preview / Create drafts / Sync / Follow-ups.
 
 The server binds to `127.0.0.1` only — it can create Gmail drafts and read your
 token, so it must never be reachable from the network you're on. It is not
@@ -89,6 +89,28 @@ recorded as sent. Gone and not sent → you deleted it, so the contact is marked
 
 Contact status: `new → active → replied | bounced | closed | skipped`.
 
+## Resume attachment
+
+Drop a PDF/DOC/DOCX/TXT (10 MB max) into the Resume section. Choose when it
+rides along:
+
+| Setting | Attaches to |
+|---|---|
+| `initial` | The first email only — the default on first upload |
+| `followups` | Follow-ups only |
+| `all` | Every email in the sequence |
+| `none` | Nothing (the file stays uploaded) |
+
+The file lives in `attachments/` and is gitignored — it's a personal document
+and should never be committed.
+
+Messages without an attachment stay `text/plain`; only messages that carry the
+resume become `multipart/mixed`. That matters, because an attachment on a cold
+first email is a genuine spam signal, and some corporate filters quarantine mail
+with attachments from unknown senders. **`followups` is the safer pattern** — the
+first email asks whether they want the resume, the follow-up delivers it, and by
+then you're a known sender in an existing thread.
+
 ## Volume and deliverability
 
 Gmail's hard limits are 500 recipients/day (personal) and 2000 (Workspace), but
@@ -113,6 +135,7 @@ src/server.ts       local HTTP API behind the web UI
 public/index.html   the whole UI — one file, no build step
 src/db.ts           schema + every query that decides who gets contacted
 src/csv-import.ts   Apollo column mapping, dedupe, validation
+src/attachments.ts  resume storage, filename sanitizing, size/type limits
 src/templates.ts    {{var}} rendering, fails loudly on missing data
 src/gmail.ts        OAuth, MIME building, drafts, thread reads
 src/sequence.ts     queue / follow-up / sync orchestration

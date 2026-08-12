@@ -24,7 +24,20 @@ import {
   suppress,
   threadsAwaitingReply,
 } from './db.ts';
+import { readResume, type LoadedAttachment } from './attachments.ts';
 import type { Config, Contact } from './types.ts';
+
+/**
+ * The resume for a given step, or null. Read once per run rather than per
+ * contact — the same bytes go to everyone in the batch.
+ */
+export function attachmentForStep(cfg: Config, step: number): LoadedAttachment | null {
+  const { file, attachTo } = cfg.resume ?? { file: null, attachTo: 'none' };
+  if (!file || attachTo === 'none') return null;
+  if (attachTo === 'initial' && step !== 0) return null;
+  if (attachTo === 'followups' && step === 0) return null;
+  return readResume(file);
+}
 
 export interface QueueResult {
   created: number;
@@ -74,6 +87,7 @@ export async function queueInitial(requested: number): Promise<QueueResult> {
   if (contacts.length === 0) return result;
 
   const gmail = gmailClient();
+  const attachment = attachmentForStep(cfg, 0);
 
   for (const contact of contacts) {
     let subject: string, body: string;
@@ -94,6 +108,7 @@ export async function queueInitial(requested: number): Promise<QueueResult> {
       toName: recipientName(contact),
       subject,
       body,
+      attachment,
     });
 
     recordDraft({ contactId: contact.id, step: 0, subject, body, draftId, threadId });
@@ -120,6 +135,7 @@ export async function queueFollowUps(requested: number): Promise<QueueResult> {
   for (const step of [...cfg.followUps].sort((a, b) => a.step - b.step)) {
     if (budget === 0) break;
     const due = dueForFollowUp(step.step, step.afterDays, budget);
+    const attachment = attachmentForStep(cfg, step.step);
 
     for (const contact of due) {
       const previous = lastSentMessage(contact.id);
@@ -146,6 +162,7 @@ export async function queueFollowUps(requested: number): Promise<QueueResult> {
         body,
         threadId: previous.gmail_thread_id,
         inReplyTo: previous.rfc_message_id,
+        attachment,
       });
 
       recordDraft({ contactId: contact.id, step: step.step, subject, body, draftId, threadId });

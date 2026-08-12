@@ -9,5 +9,9 @@
   "followUps": [
     { "step": 1, "afterDays": 3, "template": "followup-1.txt" },
     { "step": 2, "afterDays": 8, "template": "followup-2.txt" }
-  ]
+  ],
+  "resume": {
+    "file": null,
+    "attachTo": "none"
+  }
 }

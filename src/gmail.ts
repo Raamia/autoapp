@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createServer } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { exec } from 'node:child_process';
 import { google } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
@@ -101,24 +102,53 @@ export interface DraftInput {
   /** Set both to thread a follow-up onto the original conversation. */
   threadId?: string | null;
   inReplyTo?: string | null;
+  attachment?: { filename: string; content: Buffer; mimeType: string } | null;
 }
 
-function buildMime(d: DraftInput): string {
+const crlf = (s: string): string => s.replace(/\r?\n/g, '\r\n');
+
+/** Base64 bodies must be wrapped at 76 characters per RFC 2045. */
+const wrapBase64 = (b64: string): string => (b64.match(/.{1,76}/g) ?? []).join('\r\n');
+
+/** Exported so the MIME output can be verified without hitting Gmail. */
+export function buildMime(d: DraftInput): string {
   const toHeader = d.toName ? `${encodeHeader(d.toName)} <${d.to}>` : d.to;
   const headers = [
     `From: ${encodeHeader(d.fromName)} <${d.from}>`,
     `To: ${toHeader}`,
     `Subject: ${encodeHeader(d.subject)}`,
     'MIME-Version: 1.0',
-    // Plain text only. Multipart/HTML mail from a personal account is a
-    // measurable deliverability penalty on cold sends.
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: 8bit',
   ];
   if (d.inReplyTo) {
     headers.push(`In-Reply-To: ${d.inReplyTo}`, `References: ${d.inReplyTo}`);
   }
-  return `${headers.join('\r\n')}\r\n\r\n${d.body.replace(/\n/g, '\r\n')}`;
+
+  // No attachment: stay plain text. HTML mail from a personal account is a
+  // measurable deliverability penalty on cold sends.
+  if (!d.attachment) {
+    headers.push('Content-Type: text/plain; charset="UTF-8"', 'Content-Transfer-Encoding: 8bit');
+    return `${headers.join('\r\n')}\r\n\r\n${crlf(d.body)}`;
+  }
+
+  const boundary = `----autoapp_${randomUUID()}`;
+  headers.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+
+  const parts = [
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: 8bit',
+    '',
+    crlf(d.body),
+    `--${boundary}`,
+    `Content-Type: ${d.attachment.mimeType}; name="${d.attachment.filename}"`,
+    `Content-Disposition: attachment; filename="${d.attachment.filename}"`,
+    'Content-Transfer-Encoding: base64',
+    '',
+    wrapBase64(d.attachment.content.toString('base64')),
+    `--${boundary}--`,
+    '',
+  ];
+  return `${headers.join('\r\n')}\r\n\r\n${parts.join('\r\n')}`;
 }
 
 export async function createDraft(
