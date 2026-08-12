@@ -26,35 +26,54 @@ import {
 } from './db.ts';
 import type { Config, Contact } from './types.ts';
 
-/** How many drafts we may still create today. */
-function remainingToday(cfg: Config, requested: number): number {
-  const used = draftsCreatedToday();
-  const left = Math.max(0, cfg.dailyCap - used);
-  if (left === 0) {
-    console.log(`Daily cap reached (${used}/${cfg.dailyCap} drafts created today).`);
-  } else if (requested > left) {
-    console.log(`Trimming to ${left} — daily cap is ${cfg.dailyCap}, ${used} already created.`);
-  }
-  return Math.min(requested, left);
+export interface QueueResult {
+  created: number;
+  drafted: string[];
+  skipped: { who: string; reason: string }[];
+  /** Set when the daily cap trimmed or blocked this run. */
+  capNote: string | null;
+}
+
+export interface SyncResult {
+  sent: number;
+  replied: number;
+  bounced: number;
+  discarded: number;
+  notes: string[];
 }
 
 const label = (c: Contact): string =>
   `${[c.first_name, c.last_name].filter(Boolean).join(' ') || c.email} <${c.email}>`;
 
-export async function queueInitial(requested: number): Promise<void> {
+const recipientName = (c: Contact): string | null =>
+  [c.first_name, c.last_name].filter(Boolean).join(' ') || null;
+
+/** How many drafts we may still create today, plus a note if we had to trim. */
+function budgetForToday(cfg: Config, requested: number): { limit: number; note: string | null } {
+  const used = draftsCreatedToday();
+  const left = Math.max(0, cfg.dailyCap - used);
+  if (left === 0) {
+    return { limit: 0, note: `Daily cap reached — ${used}/${cfg.dailyCap} drafts created today.` };
+  }
+  if (requested > left) {
+    return {
+      limit: left,
+      note: `Trimmed to ${left} — daily cap is ${cfg.dailyCap} and ${used} were already created today.`,
+    };
+  }
+  return { limit: requested, note: null };
+}
+
+export async function queueInitial(requested: number): Promise<QueueResult> {
   const cfg = loadConfig();
-  const limit = remainingToday(cfg, requested);
-  if (limit === 0) return;
+  const { limit, note } = budgetForToday(cfg, requested);
+  const result: QueueResult = { created: 0, drafted: [], skipped: [], capNote: note };
+  if (limit === 0) return result;
 
   const contacts = eligibleForInitial(limit);
-  if (contacts.length === 0) {
-    console.log('No contacts waiting for a first message. Import an Apollo CSV first.');
-    return;
-  }
+  if (contacts.length === 0) return result;
 
   const gmail = gmailClient();
-  let created = 0;
-  const skipped: string[] = [];
 
   for (const contact of contacts) {
     let subject: string, body: string;
@@ -62,7 +81,7 @@ export async function queueInitial(requested: number): Promise<void> {
       ({ subject, body } = render(cfg.initialTemplate, contact, cfg));
     } catch (e) {
       if (e instanceof TemplateError) {
-        skipped.push(`${label(contact)} — ${e.message}`);
+        result.skipped.push({ who: label(contact), reason: e.message });
         continue;
       }
       throw e;
@@ -72,35 +91,31 @@ export async function queueInitial(requested: number): Promise<void> {
       from: cfg.me.email,
       fromName: cfg.me.name,
       to: contact.email,
-      toName: [contact.first_name, contact.last_name].filter(Boolean).join(' ') || null,
+      toName: recipientName(contact),
       subject,
       body,
     });
 
     recordDraft({ contactId: contact.id, step: 0, subject, body, draftId, threadId });
     setContactStatus(contact.id, 'active');
-    created++;
-    console.log(`  drafted → ${label(contact)}`);
+    result.created++;
+    result.drafted.push(label(contact));
   }
 
-  console.log(`\n${created} draft(s) created in Gmail. Review and send them yourself.`);
-  if (skipped.length) {
-    console.log(`\n${skipped.length} skipped (missing data — fix the CSV and re-import):`);
-    for (const s of skipped) console.log(`  - ${s}`);
-  }
+  return result;
 }
 
-export async function queueFollowUps(requested: number): Promise<void> {
+export async function queueFollowUps(requested: number): Promise<QueueResult> {
   const cfg = loadConfig();
-  if (!cfg.followUps?.length) {
-    console.log('No follow-up steps configured.');
-    return;
-  }
-  let budget = remainingToday(cfg, requested);
-  if (budget === 0) return;
+  const result: QueueResult = { created: 0, drafted: [], skipped: [], capNote: null };
+  if (!cfg.followUps?.length) return result;
+
+  const { limit, note } = budgetForToday(cfg, requested);
+  result.capNote = note;
+  let budget = limit;
+  if (budget === 0) return result;
 
   const gmail = gmailClient();
-  let created = 0;
 
   for (const step of [...cfg.followUps].sort((a, b) => a.step - b.step)) {
     if (budget === 0) break;
@@ -114,7 +129,10 @@ export async function queueFollowUps(requested: number): Promise<void> {
       try {
         ({ subject, body } = render(step.template, contact, cfg));
       } catch (e) {
-        if (e instanceof TemplateError) continue;
+        if (e instanceof TemplateError) {
+          result.skipped.push({ who: label(contact), reason: e.message });
+          continue;
+        }
         throw e;
       }
 
@@ -122,7 +140,7 @@ export async function queueFollowUps(requested: number): Promise<void> {
         from: cfg.me.email,
         fromName: cfg.me.name,
         to: contact.email,
-        toName: [contact.first_name, contact.last_name].filter(Boolean).join(' ') || null,
+        toName: recipientName(contact),
         // Keep Gmail's own "Re:" convention so it reads as a real thread.
         subject: subject.startsWith('Re:') ? subject : `Re: ${previous.subject}`,
         body,
@@ -131,35 +149,35 @@ export async function queueFollowUps(requested: number): Promise<void> {
       });
 
       recordDraft({ contactId: contact.id, step: step.step, subject, body, draftId, threadId });
-      created++;
+      result.created++;
+      result.drafted.push(`follow-up ${step.step} → ${label(contact)}`);
       budget--;
-      console.log(`  follow-up ${step.step} drafted → ${label(contact)}`);
       if (budget === 0) break;
     }
   }
 
-  console.log(created ? `\n${created} follow-up draft(s) created.` : 'Nothing due for follow-up.');
+  return result;
 }
 
 /**
  * Reconcile local state with what actually happened in Gmail:
  * which drafts you sent, who replied, and what bounced.
  */
-export async function sync(): Promise<void> {
+export async function sync(): Promise<SyncResult> {
   const gmail = gmailClient();
   const me = await getProfileEmail(gmail);
+  const result: SyncResult = { sent: 0, replied: 0, bounced: 0, discarded: 0, notes: [] };
 
-  const sentNow = await reconcileDrafts(gmail, me);
-  const { replied, bounced } = await detectReplies(gmail, me);
-
-  console.log(
-    `Sync complete — ${sentNow} newly sent, ${replied} replied, ${bounced} bounced.`,
-  );
+  await reconcileDrafts(gmail, me, result);
+  await detectReplies(gmail, me, result);
+  return result;
 }
 
-async function reconcileDrafts(gmail: gmail_v1.Gmail, me: string): Promise<number> {
-  let sent = 0;
-
+async function reconcileDrafts(
+  gmail: gmail_v1.Gmail,
+  me: string,
+  result: SyncResult,
+): Promise<void> {
   for (const msg of openDrafts()) {
     if (!msg.gmail_draft_id) continue;
     if (await draftExists(gmail, msg.gmail_draft_id)) continue; // still sitting in Drafts
@@ -169,34 +187,33 @@ async function reconcileDrafts(gmail: gmail_v1.Gmail, me: string): Promise<numbe
     if (msg.gmail_thread_id) {
       try {
         const thread = await getThread(gmail, msg.gmail_thread_id);
-        mine = thread.find(
-          (t) => t.labels.includes('SENT') && extractAddress(t.from) === me,
-        );
+        mine = thread.find((t) => t.labels.includes('SENT') && extractAddress(t.from) === me);
       } catch {
         mine = undefined;
       }
     }
 
+    const contact = getContact(msg.contact_id);
+
     if (mine) {
       markSent(msg.id, mine.id, mine.threadId, mine.rfcMessageId, mine.internalDate.toISOString());
-      sent++;
+      result.sent++;
     } else {
       markDiscarded(msg.id);
       // You deleted the draft rather than sending it — read that as "not this person".
       setContactStatus(msg.contact_id, 'skipped');
       logEvent(msg.contact_id, 'draft_discarded', `step ${msg.step}`);
+      result.discarded++;
+      result.notes.push(`skipped — you deleted the draft to ${contact?.email ?? msg.contact_id}`);
     }
   }
-  return sent;
 }
 
 async function detectReplies(
   gmail: gmail_v1.Gmail,
   me: string,
-): Promise<{ replied: number; bounced: number }> {
-  let replied = 0;
-  let bounced = 0;
-
+  result: SyncResult,
+): Promise<void> {
   for (const msg of threadsAwaitingReply()) {
     if (!msg.gmail_thread_id) continue;
 
@@ -208,9 +225,7 @@ async function detectReplies(
     }
 
     const sentAt = msg.sent_at ? new Date(msg.sent_at) : new Date(0);
-    const inbound = thread.filter(
-      (t) => extractAddress(t.from) !== me && t.internalDate >= sentAt,
-    );
+    const inbound = thread.filter((t) => extractAddress(t.from) !== me && t.internalDate >= sentAt);
     if (inbound.length === 0) continue;
 
     const contact = getContact(msg.contact_id);
@@ -220,15 +235,13 @@ async function detectReplies(
       setContactStatus(msg.contact_id, 'bounced');
       logEvent(msg.contact_id, 'bounce', bounce.subject);
       if (contact) suppress(contact.email, 'hard bounce');
-      bounced++;
-      console.log(`  bounced  ← ${contact?.email ?? msg.contact_id}`);
+      result.bounced++;
+      result.notes.push(`bounced — ${contact?.email ?? msg.contact_id} suppressed`);
     } else {
       setContactStatus(msg.contact_id, 'replied');
       logEvent(msg.contact_id, 'reply', inbound[0].from);
-      replied++;
-      console.log(`  replied  ← ${contact?.email ?? msg.contact_id} (sequence stopped)`);
+      result.replied++;
+      result.notes.push(`replied — ${contact?.email ?? msg.contact_id} (sequence stopped)`);
     }
   }
-
-  return { replied, bounced };
 }

@@ -17,9 +17,24 @@ autoapp — Apollo CSV → reviewed Gmail drafts → follow-ups
   sync                     Detect what you sent, who replied, what bounced
   status                   Pipeline counts
   suppress <email> [why]   Never contact this address
+  serve [--port N]         Open the web UI (default http://localhost:4173)
 
 Run sync before queue/followup so today's state is current.
 `;
+
+function printQueueResult(r: import('./sequence.ts').QueueResult, noun: string): void {
+  if (r.capNote) console.log(r.capNote);
+  for (const d of r.drafted) console.log(`  drafted → ${d}`);
+  console.log(
+    r.created
+      ? `\n${r.created} ${noun}(s) created in Gmail. Review and send them yourself.`
+      : `No ${noun}s created.`,
+  );
+  if (r.skipped.length) {
+    console.log(`\n${r.skipped.length} skipped (missing data — fix the CSV and re-import):`);
+    for (const s of r.skipped) console.log(`  - ${s.who} — ${s.reason}`);
+  }
+}
 
 function flag(args: string[], name: string, fallback: number): number {
   const i = args.indexOf(`--${name}`);
@@ -72,17 +87,32 @@ async function main(): Promise<void> {
       break;
     }
 
-    case 'queue':
-      await queueInitial(flag(args, 'limit', 10));
+    case 'queue': {
+      const r = await queueInitial(flag(args, 'limit', 10));
+      printQueueResult(r, 'draft');
       break;
+    }
 
-    case 'followup':
-      await queueFollowUps(flag(args, 'limit', 10));
+    case 'followup': {
+      const r = await queueFollowUps(flag(args, 'limit', 10));
+      printQueueResult(r, 'follow-up draft');
       break;
+    }
 
-    case 'sync':
-      await sync();
+    case 'sync': {
+      const r = await sync();
+      for (const n of r.notes) console.log(`  ${n}`);
+      console.log(
+        `Sync complete — ${r.sent} newly sent, ${r.replied} replied, ${r.bounced} bounced, ${r.discarded} discarded.`,
+      );
       break;
+    }
+
+    case 'serve': {
+      const { startServer } = await import('./server.ts');
+      await startServer(flag(args, 'port', 4173));
+      return; // keep the process alive
+    }
 
     case 'status': {
       const rows = getDb()
