@@ -22,7 +22,12 @@ export interface ImportResult {
 }
 
 export function importCsv(path: string): ImportResult {
-  const rows = parse(readFileSync(path, 'utf8'), {
+  return importCsvContent(readFileSync(path, 'utf8'), basename(path));
+}
+
+/** Same as importCsv, but for content already in memory (browser upload). */
+export function importCsvContent(content: string, source: string): ImportResult {
+  const rows = parse(content, {
     columns: (header: string[]) => header.map(normalizeKey),
     skip_empty_lines: true,
     trim: true,
@@ -30,7 +35,6 @@ export function importCsv(path: string): ImportResult {
   }) as Record<string, string>[];
 
   const result: ImportResult = { inserted: 0, updated: 0, skipped: [] };
-  const source = basename(path);
   const seenInFile = new Set<string>();
 
   rows.forEach((row, i) => {

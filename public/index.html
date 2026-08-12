@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>autoapp</title>
+<style>
+  :root {
+    --bg: #f6f7f9;      --card: #fff;      --ink: #16181d;   --muted: #6b7280;
+    --line: #e3e6ea;    --accent: #2f6df6; --accent-ink: #fff;
+    --ok: #0f7b4f;      --warn: #9a5b00;   --bad: #b3261e;   --ok-bg: #e7f5ee;
+    --warn-bg: #fdf3e2; --bad-bg: #fdecea; --code: #f2f3f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;    --card: #1c1f25;   --ink: #e8eaed;   --muted: #9aa1ab;
+      --line: #2c313a;  --accent: #5b8dff; --accent-ink: #10131a;
+      --ok: #6ee7a8;    --warn: #f0c274;   --bad: #ff9a92;   --ok-bg: #14301f;
+      --warn-bg: #33270f; --bad-bg: #3a1a17; --code: #22262e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; margin: 0 0 14px; letter-spacing: -0.01em; }
+  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px; margin-bottom: 16px;
+  }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 0 0 4px; font-weight: 500; }
+  input, textarea, select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--ink); font: inherit;
+  }
+  textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; resize: vertical; }
+  input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .field { margin-bottom: 12px; }
+  button {
+    padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); font: inherit; font-weight: 500; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500;
+    padding: 3px 9px; border-radius: 999px; background: var(--code); color: var(--muted);
+  }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .drop {
+    border: 2px dashed var(--line); border-radius: 10px; padding: 28px; text-align: center;
+    color: var(--muted); cursor: pointer; transition: .15s;
+  }
+  .drop.over { border-color: var(--accent); background: var(--code); color: var(--ink); }
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .stat { background: var(--code); border-radius: 8px; padding: 8px 12px; min-width: 84px; }
+  .stat b { display: block; font-size: 18px; font-weight: 600; }
+  .stat span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  pre.out {
+    background: var(--code); border-radius: 8px; padding: 14px; font-size: 12.5px;
+    white-space: pre-wrap; word-break: break-word; margin: 14px 0 0; max-height: 380px; overflow: auto;
+  }
+  pre.out:empty { display: none; }
+  .note { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+  .banner { padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
+  .banner.warn { background: var(--warn-bg); color: var(--warn); }
+  .banner.bad { background: var(--bad-bg); color: var(--bad); }
+  .msg { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+  .msg h4 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
+  .msg .to { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .msg pre { margin: 0; white-space: pre-wrap; font: inherit; font-size: 13px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tabs button.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>autoapp</h1>
+    <span class="pill" id="authPill">checking…</span>
+    <span class="pill" id="capPill"></span>
+  </header>
+  <p class="sub">Apollo CSV → reviewed Gmail drafts. Nothing sends itself — you review every message in Gmail.</p>
+
+  <div id="banners"></div>
+
+  <!-- ── Setup ─────────────────────────────────────────── -->
+  <div class="card">
+    <h2>1 · Your details</h2>
+    <div class="row">
+      <div><label for="name">Your name</label><input id="name" placeholder="Raamia Abichou"></div>
+      <div><label for="email">Your Gmail address</label><input id="email" type="email" placeholder="you@gmail.com"></div>
+    </div>
+    <div class="field">
+      <label for="signature">Signature</label>
+      <textarea id="signature" rows="2" placeholder="Raamia Abichou&#10;linkedin.com/in/you"></textarea>
+    </div>
+    <div class="row">
+      <div>
+        <label for="cap">Daily cap (drafts per day)</label>
+        <input id="cap" type="number" min="1" value="25">
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <button class="primary" id="saveConfig">Save details</button>
+        <button id="connect">Connect Gmail</button>
+      </div>
+    </div>
+    <p class="note">20–40/day is the safe range from a personal Gmail. Higher sustained volume risks spam-flagging your whole account, not just outreach.</p>
+  </div>
+
+  <!-- ── Templates ─────────────────────────────────────── -->
+  <div class="card">
+    <h2>2 · Templates</h2>
+    <div class="tabs" id="tplTabs"></div>
+    <textarea id="tplBody" rows="16" spellcheck="true"></textarea>
+    <div class="actions" style="margin-top:12px">
+      <button class="primary" id="saveTpl">Save template</button>
+      <span class="note" style="margin:0" id="tplNote"></span>
+    </div>
+    <p class="note">
+      <code>{{first_name}}</code> <code>{{company}}</code> <code>{{title}}</code> <code>{{signature}}</code>
+      fill in per contact. Anything in <code>[SQUARE BRACKETS]</code> is yours to replace by hand.
+      First line must be <code>Subject: …</code> followed by a blank line.
+    </p>
+  </div>
+
+  <!-- ── Contacts ──────────────────────────────────────── -->
+  <div class="card">
+    <h2>3 · Contacts</h2>
+    <div class="drop" id="drop">
+      <strong>Drop an Apollo CSV here</strong><br>
+      <span style="font-size:13px">or click to choose a file</span>
+    </div>
+    <input type="file" id="file" accept=".csv,text/csv" hidden>
+    <div class="stats" id="stats"></div>
+    <pre class="out" id="importOut"></pre>
+  </div>
+
+  <!-- ── Run ───────────────────────────────────────────── -->
+  <div class="card">
+    <h2>4 · Run</h2>
+    <div class="actions">
+      <label for="limit" style="margin:0">How many</label>
+      <input id="limit" type="number" min="1" value="10" style="width:74px">
+      <button id="btnPreview">Preview</button>
+      <button class="primary" id="btnQueue">Create drafts</button>
+      <button id="btnSync">Sync</button>
+      <button id="btnFollow">Follow-ups</button>
+    </div>
+    <p class="note">
+      <strong>Preview</strong> renders messages here without touching Gmail.
+      <strong>Create drafts</strong> puts them in your Gmail Drafts folder to review and send.
+      <strong>Sync</strong> records what you actually sent and stops sequences for anyone who replied — run it before creating more.
+    </p>
+    <div id="preview"></div>
+    <pre class="out" id="runOut"></pre>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, method = 'GET', body) {
+  const res = await fetch(path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+let state = {};
+let currentTpl = null;
+
+function banner(text, kind = 'warn') {
+  const d = document.createElement('div');
+  d.className = `banner ${kind}`;
+  d.textContent = text;
+  $('banners').appendChild(d);
+}
+
+async function refresh() {
+  state = await api('/api/state');
+  $('banners').innerHTML = '';
+
+  // Auth + cap pills
+  const pill = $('authPill');
+  if (state.authRunning) { pill.className = 'pill'; pill.textContent = 'authorizing…'; }
+  else if (state.authorized) { pill.className = 'pill ok'; pill.textContent = 'Gmail connected'; }
+  else { pill.className = 'pill bad'; pill.textContent = 'Gmail not connected'; }
+
+  if (!state.hasCredentials) {
+    banner('No credentials.json yet — create an OAuth "Desktop app" client in Google Cloud with the Gmail API enabled, then save the download here as credentials.json. See the README.', 'bad');
+  }
+  if (state.authError) banner('Authorization failed: ' + state.authError, 'bad');
+
+  if (state.config) {
+    $('name').value = state.config.me.name || '';
+    $('email').value = state.config.me.email || '';
+    $('signature').value = state.config.signature || '';
+    $('cap').value = state.config.dailyCap ?? 25;
+    $('capPill').textContent = `cap ${state.config.dailyCap}/day`;
+  }
+
+  // Templates
+  const tabs = $('tplTabs');
+  if (tabs.childElementCount !== state.templates.length) {
+    tabs.innerHTML = '';
+    state.templates.forEach((t) => {
+      const b = document.createElement('button');
+      b.textContent = t;
+      b.onclick = () => loadTemplate(t);
+      tabs.appendChild(b);
+    });
+    if (state.templates.length) loadTemplate(currentTpl || state.templates[0]);
+  }
+
+  // Pipeline stats
+  const order = ['new', 'active', 'replied', 'bounced', 'skipped', 'closed'];
+  const stats = $('stats');
+  stats.innerHTML = '';
+  const cells = order
+    .filter((k) => state.statuses[k])
+    .map((k) => [k, state.statuses[k]]);
+  if (state.drafts) cells.push(['drafts in gmail', state.drafts]);
+  if (!cells.length) {
+    stats.innerHTML = '<div class="note" style="margin:0">No contacts yet — drop a CSV above.</div>';
+  } else {
+    for (const [k, v] of cells) {
+      const d = document.createElement('div');
+      d.className = 'stat';
+      d.innerHTML = `<b></b><span></span>`;
+      d.querySelector('b').textContent = v;
+      d.querySelector('span').textContent = k;
+      stats.appendChild(d);
+    }
+  }
+}
+
+async function loadTemplate(name) {
+  currentTpl = name;
+  [...$('tplTabs').children].forEach((b) => b.classList.toggle('active', b.textContent === name));
+  const { content } = await api('/api/template?name=' + encodeURIComponent(name));
+  $('tplBody').value = content;
+  $('tplNote').textContent = '';
+}
+
+async function withBusy(btn, fn) {
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '…';
+  try { await fn(); }
+  catch (e) { $('runOut').textContent = 'Error: ' + e.message; }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
+
+// ── Config ──
+$('saveConfig').onclick = (e) => withBusy(e.target, async () => {
+  await api('/api/config', 'POST', {
+    me: { name: $('name').value, email: $('email').value },
+    signature: $('signature').value,
+    dailyCap: Number($('cap').value),
+    initialTemplate: state.config?.initialTemplate || 'initial.txt',
+    followUps: state.config?.followUps || [
+      { step: 1, afterDays: 3, template: 'followup-1.txt' },
+      { step: 2, afterDays: 8, template: 'followup-2.txt' },
+    ],
+  });
+  await refresh();
+  $('runOut').textContent = 'Details saved.';
+});
+
+$('connect').onclick = (e) => withBusy(e.target, async () => {
+  await api('/api/auth', 'POST', {});
+  $('runOut').textContent = 'A browser tab should have opened — approve access there, then come back.';
+  const poll = setInterval(async () => {
+    await refresh();
+    if (!state.authRunning) clearInterval(poll);
+  }, 1500);
+});
+
+// ── Templates ──
+$('saveTpl').onclick = (e) => withBusy(e.target, async () => {
+  try {
+    await api('/api/template', 'POST', { name: currentTpl, content: $('tplBody').value });
+    $('tplNote').textContent = 'Saved.';
+  } catch (err) {
+    $('tplNote').textContent = err.message;
+    throw err;
+  }
+});
+
+// ── CSV drop ──
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = (e) => {
+  e.preventDefault();
+  drop.classList.remove('over');
+  if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]);
+};
+$('file').onchange = (e) => e.target.files[0] && upload(e.target.files[0]);
+
+async function upload(file) {
+  const out = $('importOut');
+  out.textContent = `Reading ${file.name}…`;
+  try {
+    const r = await api('/api/import', 'POST', { filename: file.name, content: await file.text() });
+    const lines = [`${file.name} — ${r.inserted} new, ${r.updated} updated.`];
+    if (r.skipped) {
+      lines.push(`${r.skipped} skipped:`);
+      for (const [reason, n] of Object.entries(r.byReason)) lines.push(`  ${n} × ${reason}`);
+    }
+    out.textContent = lines.join('\n');
+    await refresh();
+  } catch (e) {
+    out.textContent = 'Error: ' + e.message;
+  }
+}
+
+// ── Run ──
+const limit = () => Number($('limit').value) || 10;
+
+$('btnPreview').onclick = (e) => withBusy(e.target, async () => {
+  const { messages } = await api('/api/preview', 'POST', { limit: limit() });
+  const box = $('preview');
+  box.innerHTML = '';
+  $('runOut').textContent = '';
+  if (!messages.length) { $('runOut').textContent = 'Nothing queued to preview.'; return; }
+  for (const m of messages) {
+    const d = document.createElement('div');
+    d.className = 'msg';
+    const h = document.createElement('h4');
+    const to = document.createElement('div');
+    to.className = 'to';
+    to.textContent = m.to;
+    const pre = document.createElement('pre');
+    if (m.error) { h.textContent = 'Skipped'; pre.textContent = m.error; }
+    else { h.textContent = m.subject; pre.textContent = m.body; }
+    d.append(h, to, pre);
+    box.appendChild(d);
+  }
+});
+
+function reportQueue(r, noun) {
+  const lines = [];
+  if (r.capNote) lines.push(r.capNote);
+  r.drafted.forEach((d) => lines.push('  drafted → ' + d));
+  lines.push(r.created ? `\n${r.created} ${noun}(s) created. Review and send them in Gmail.` : `No ${noun}s created.`);
+  if (r.skipped.length) {
+    lines.push(`\n${r.skipped.length} skipped (missing data):`);
+    r.skipped.forEach((s) => lines.push(`  - ${s.who} — ${s.reason}`));
+  }
+  return lines.join('\n');
+}
+
+$('btnQueue').onclick = (e) => withBusy(e.target, async () => {
+  $('preview').innerHTML = '';
+  const r = await api('/api/queue', 'POST', { limit: limit() });
+  $('runOut').textContent = reportQueue(r, 'draft');
+  await refresh();
+});
+
+$('btnFollow').onclick = (e) => withBusy(e.target, async () => {
+  $('preview').innerHTML = '';
+  const r = await api('/api/followup', 'POST', { limit: limit() });
+  $('runOut').textContent = reportQueue(r, 'follow-up');
+  await refresh();
+});
+
+$('btnSync').onclick = (e) => withBusy(e.target, async () => {
+  $('preview').innerHTML = '';
+  const r = await api('/api/sync', 'POST', {});
+  const lines = r.notes.map((n) => '  ' + n);
+  lines.push(`\n${r.sent} newly sent · ${r.replied} replied · ${r.bounced} bounced · ${r.discarded} discarded`);
+  $('runOut').textContent = lines.join('\n');
+  await refresh();
+});
+
+refresh().catch((e) => banner('Could not reach the server: ' + e.message, 'bad'));
+</script>
+</body>
+</html>

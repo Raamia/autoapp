@@ -9,6 +9,7 @@
   },
   "scripts": {
     "autoapp": "node --disable-warning=ExperimentalWarning --experimental-strip-types src/cli.ts",
+    "web": "node --disable-warning=ExperimentalWarning --experimental-strip-types src/cli.ts serve",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

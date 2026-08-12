@@ -44,7 +44,23 @@ A contact missing a value the template needs is skipped with a warning rather
 than emailed "Hi ,". If you drop `{{company}}` from a template, contacts with
 no company become eligible again.
 
-## Daily loop
+## Daily loop — web UI
+
+```bash
+npm run web
+```
+
+Opens <http://localhost:4173>. Everything is on one page: your details and the
+Gmail connect button, the template editor, a drag-and-drop zone for Apollo CSVs,
+and buttons for Preview / Create drafts / Sync / Follow-ups.
+
+The server binds to `127.0.0.1` only — it can create Gmail drafts and read your
+token, so it must never be reachable from the network you're on. It is not
+authenticated, because nothing off your machine can reach it.
+
+## Daily loop — CLI
+
+Same operations, if you'd rather script it:
 
 ```bash
 npm run autoapp -- import ~/Downloads/apollo-export.csv
@@ -93,12 +109,17 @@ address carrying the reputation risk.
 
 ```
 src/cli.ts          command dispatch
+src/server.ts       local HTTP API behind the web UI
+public/index.html   the whole UI — one file, no build step
 src/db.ts           schema + every query that decides who gets contacted
 src/csv-import.ts   Apollo column mapping, dedupe, validation
 src/templates.ts    {{var}} rendering, fails loudly on missing data
 src/gmail.ts        OAuth, MIME building, drafts, thread reads
 src/sequence.ts     queue / follow-up / sync orchestration
 ```
+
+The UI and the CLI call the same functions in `sequence.ts`, so they can't drift
+apart — a rule enforced in one is enforced in both.
 
 State lives in `data/autoapp.db` (SQLite). `credentials.json`, `token.json`,
 `config.json`, `*.csv` and `data/` are all gitignored — none of them should

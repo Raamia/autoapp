@@ -62,6 +62,11 @@ export async function authorize(): Promise<void> {
   console.log(`Saved credentials to ${TOKEN_PATH}`);
 }
 
+export const authStatus = (): { hasCredentials: boolean; authorized: boolean } => ({
+  hasCredentials: existsSync(CREDENTIALS_PATH),
+  authorized: existsSync(TOKEN_PATH),
+});
+
 export function gmailClient(): gmail_v1.Gmail {
   if (!existsSync(TOKEN_PATH)) {
     throw new Error('Not authorized yet. Run: npm run autoapp -- auth');
